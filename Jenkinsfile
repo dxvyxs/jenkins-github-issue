@@ -1,6 +1,8 @@
 @Library('github-issue-creator') _
 
 pipeline {
+    agent any
+    
     stages {
         stage('Build') {
             steps {

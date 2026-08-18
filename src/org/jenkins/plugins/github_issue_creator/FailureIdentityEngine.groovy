@@ -41,7 +41,7 @@ class FailureIdentityEngine implements Serializable {
         // Temporary file paths with random components
         [pattern: /\/tmp\/[^\s]+/, replacement: '<TMPPATH>'],
         // Process IDs
-        [pattern: /(?i)\bpid[=:\s]+\d+/i, replacement: 'pid=<PID>'],
+        [pattern: /(?i)\bpid[=:\s]+\d+/, replacement: 'pid=<PID>'],
     ]
 
     // Lines that are not meaningful for identity computation

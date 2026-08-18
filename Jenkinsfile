@@ -6,16 +6,18 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo 'Building...'
+                sh 'exit 1'  // Force failure to test the notification
             }
         }
     }
     post {
         failure {
             script {
-                notifyGithubIssue(
-                    repo: 'your-org/your-repo',
-                    credentialsId: 'github-token'
+                notifyGitHubIssue(
+                    githubRepo: 'dxvyxs/slsa-demo',
+                    credentialId: 'github-issue-token',
+                    labels: ['ci-failure', 'automated'],
+                    stageName: 'Build'
                 )
             }
         }

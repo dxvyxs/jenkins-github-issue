@@ -1,10 +1,20 @@
+@Library('github-issue-creator') _
+
 pipeline {
-    agent any
-    
     stages {
-        stage('Test') {
+        stage('Build') {
             steps {
-                sh 'mvn clean test'
+                echo 'Building...'
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                notifyGithubIssue(
+                    repo: 'your-org/your-repo',
+                    credentialsId: 'github-token'
+                )
             }
         }
     }

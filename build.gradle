@@ -12,10 +12,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.codehaus.groovy:groovy-all:3.0.19'
-    implementation 'org.codehaus.groovy:groovy-json:3.0.19'
+    implementation 'org.codehaus.groovy:groovy-all:4.0.21'
+    implementation 'org.codehaus.groovy:groovy-json:4.0.21'
 
-    testImplementation 'org.codehaus.groovy:groovy-test:3.0.19'
+    testImplementation 'org.codehaus.groovy:groovy-test:4.0.21'
     testImplementation 'junit:junit:4.13.2'
 }
 

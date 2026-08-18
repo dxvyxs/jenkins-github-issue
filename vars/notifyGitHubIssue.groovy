@@ -1,4 +1,13 @@
-import org.jenkins.plugins.github_issue_creator.*
+import org.jenkins.plugins.github_issue_creator.FailureContext
+import org.jenkins.plugins.github_issue_creator.CreationResult
+import org.jenkins.plugins.github_issue_creator.CreationAction
+import org.jenkins.plugins.github_issue_creator.Config
+import org.jenkins.plugins.github_issue_creator.GitHubApiClient
+import org.jenkins.plugins.github_issue_creator.RateLimitManager
+import org.jenkins.plugins.github_issue_creator.RetryExecutor
+import org.jenkins.plugins.github_issue_creator.GitHubIssueCreator
+import org.jenkins.plugins.github_issue_creator.SecureToken
+import org.jenkins.plugins.github_issue_creator.AlertNotifier
 
 /**
  * Jenkins Pipeline shared library step: notifyGitHubIssue

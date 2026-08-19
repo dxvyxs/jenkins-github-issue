@@ -18,6 +18,7 @@ pipeline {
                     credentialId: 'github-issue-token',
                     labels: ['ci-failure', 'automated'],
                     stageName: 'Build'
+                    rateLimitThreshold: 10
                 )
             }
         }

@@ -202,19 +202,3 @@ abstract class ExecutionResult implements Serializable {
     boolean isSafeFail() { return this instanceof SafeFail }
 }
 
-/**
- * Represents an HTTP response from the GitHub API.
- */
-class ApiResponse implements Serializable {
-    private static final long serialVersionUID = 1L
-
-    int statusCode
-    String body
-    Map<String, String> headers = [:]
-
-    /** Parse the JSON body */
-    Object parsedBody() {
-        if (!body) return [:]
-        return new groovy.json.JsonSlurper().parseText(body)
-    }
-}

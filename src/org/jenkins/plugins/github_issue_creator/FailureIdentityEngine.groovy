@@ -160,18 +160,3 @@ class FailureIdentityEngine implements Serializable {
     }
 }
 
-/**
- * Value object representing a computed failure identity.
- */
-class FailureIdentity implements Serializable {
-    private static final long serialVersionUID = 1L
-
-    /** 16-character hex hash */
-    String hash
-
-    /** Full HTML comment marker for embedding in issue body */
-    String marker
-
-    /** The raw input string that was hashed (useful for debugging) */
-    String identityInput
-}

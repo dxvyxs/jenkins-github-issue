@@ -17,7 +17,7 @@ pipeline {
                     githubRepo: 'dxvyxs/slsa-demo',
                     credentialId: 'github-issue-token',
                     labels: ['ci-failure', 'automated'],
-                    stageName: 'Build'
+                    stageName: 'Build',
                     rateLimitThreshold: 10
                 )
             }

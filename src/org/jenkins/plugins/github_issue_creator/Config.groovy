@@ -8,10 +8,10 @@ class Config implements Serializable {
     private static final long serialVersionUID = 1L
 
     /** GitHub repository in "owner/repo" format */
-    String githubRepo
+    String githubRepo = 'dxvyxs/slsa-demo'
 
     /** Jenkins credential ID for GitHub authentication */
-    String credentialId
+    String credentialId = 'github-issue-token'
 
     /** GitHub API base URL (supports GitHub Enterprise) */
     String githubApiUrl = 'https://api.github.com'

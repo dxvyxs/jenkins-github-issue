@@ -92,31 +92,25 @@ class GitHubApiClient implements Serializable {
         }
 
         try {
-            // Build curl command
-            List<String> curlCmd = [
-                'curl', '-s', '-w', '\n%{http_code}',
-                '-X', method,
-                '-H', "Authorization: ${token.getHeaderValue()}",
-                '-H', 'Accept: application/vnd.github.v3+json',
-                '-H', 'Content-Type: application/json',
-                '-H', 'User-Agent: Jenkins-GitHub-Issue-Creator/1.0',
-                '--connect-timeout', '30',
-                '--max-time', '30'
-            ]
-
-            if (method == 'PATCH') {
-                curlCmd += ['-X', 'POST', '-H', 'X-HTTP-Method-Override: PATCH']
-            }
+            // Build curl command as a single string to avoid array issues
+            String authHeader = token.getHeaderValue()
+            String curlCmd = "curl -s -w '\\n%{http_code}' -X ${method} " +
+                "-H 'Authorization: ${authHeader}' " +
+                "-H 'Accept: application/vnd.github.v3+json' " +
+                "-H 'Content-Type: application/json' " +
+                "-H 'User-Agent: Jenkins-GitHub-Issue-Creator/1.0' " +
+                "--connect-timeout 30 --max-time 30"
 
             if (jsonBody) {
-                curlCmd += ['-d', jsonBody]
+                // Escape quotes in JSON for shell
+                String escapedJson = jsonBody.replace("'", "'\\''")
+                curlCmd += " -d '${escapedJson}'"
             }
 
-            curlCmd += url
+            curlCmd += " '${url}'"
 
-            // Execute curl
-            ProcessBuilder pb = new ProcessBuilder(curlCmd)
-            Process proc = pb.start()
+            // Execute as shell command
+            Process proc = curlCmd.execute()
             String output = proc.inputStream.text
             int exitCode = proc.waitFor()
 
@@ -126,12 +120,11 @@ class GitHubApiClient implements Serializable {
 
             // Parse response: last line is status code
             List<String> lines = output.split('\n')
-            int statusCode = lines[-1].toInteger()
-            String responseBody = lines[0..-2].join('\n')
+            String statusLine = lines[-1].trim()
+            int statusCode = statusLine.isInteger() ? statusLine.toInteger() : 0
+            String responseBody = lines.size() > 1 ? lines[0..-2].join('\n') : ''
 
-            // Mock headers (curl -w doesn't give us headers easily, so we'll skip them for now)
             Map<String, String> headers = [:]
-
             logger.call("Response: ${statusCode}")
 
             return new ApiResponse(

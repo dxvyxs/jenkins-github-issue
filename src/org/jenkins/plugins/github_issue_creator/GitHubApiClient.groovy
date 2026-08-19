@@ -87,48 +87,52 @@ class GitHubApiClient implements Serializable {
     private ApiResponse executeRequest(String method, String url, String jsonBody) {
         logger.call("${method} ${sanitizeUrl(url)}")
 
-        // If a test httpExecutor is injected, use it
         if (httpExecutor != null) {
             return httpExecutor.call(method, url, jsonBody)
         }
 
         try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection()
-            conn.setRequestMethod(method == 'PATCH' ? 'POST' : method)
+            // Build curl command
+            List<String> curlCmd = [
+                'curl', '-s', '-w', '\n%{http_code}',
+                '-X', method,
+                '-H', "Authorization: ${token.getHeaderValue()}",
+                '-H', 'Accept: application/vnd.github.v3+json',
+                '-H', 'Content-Type: application/json',
+                '-H', 'User-Agent: Jenkins-GitHub-Issue-Creator/1.0',
+                '--connect-timeout', '30',
+                '--max-time', '30'
+            ]
+
             if (method == 'PATCH') {
-                conn.setRequestProperty('X-HTTP-Method-Override', 'PATCH')
+                curlCmd += ['-X', 'POST', '-H', 'X-HTTP-Method-Override: PATCH']
             }
-            conn.setRequestProperty('Authorization', token.getHeaderValue())
-            conn.setRequestProperty('Accept', 'application/vnd.github.v3+json')
-            conn.setRequestProperty('Content-Type', 'application/json')
-            conn.setRequestProperty('User-Agent', 'Jenkins-GitHub-Issue-Creator/1.0')
-            conn.setConnectTimeout(30_000)
-            conn.setReadTimeout(30_000)
 
             if (jsonBody) {
-                conn.setDoOutput(true)
-                conn.outputStream.withWriter('UTF-8') { writer ->
-                    writer.write(jsonBody)
-                }
+                curlCmd += ['-d', jsonBody]
             }
 
-            int statusCode = conn.responseCode
-            String responseBody
-            try {
-                responseBody = (statusCode >= 400 ? conn.errorStream : conn.inputStream)?.text ?: ''
-            } catch (Exception e) {
-                responseBody = ''
+            curlCmd += url
+
+            // Execute curl
+            ProcessBuilder pb = new ProcessBuilder(curlCmd)
+            Process proc = pb.start()
+            String output = proc.inputStream.text
+            int exitCode = proc.waitFor()
+
+            if (exitCode != 0) {
+                throw new RuntimeException("curl failed with exit code ${exitCode}")
             }
 
-            // Extract rate-limit headers
+            // Parse response: last line is status code
+            List<String> lines = output.split('\n')
+            int statusCode = lines[-1].toInteger()
+            String responseBody = lines[0..-2].join('\n')
+
+            // Mock headers (curl -w doesn't give us headers easily, so we'll skip them for now)
             Map<String, String> headers = [:]
-            ['X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-RateLimit-Limit',
-             'Retry-After', 'X-RateLimit-Resource'].each { headerName ->
-                String value = conn.getHeaderField(headerName)
-                if (value) headers[headerName] = value
-            }
 
-            logger.call("Response: ${statusCode}, Remaining: ${headers['X-RateLimit-Remaining'] ?: 'unknown'}")
+            logger.call("Response: ${statusCode}")
 
             return new ApiResponse(
                 statusCode: statusCode,
@@ -137,7 +141,6 @@ class GitHubApiClient implements Serializable {
             )
 
         } catch (Exception e) {
-            // CRITICAL: Strip any token information from the exception
             String safeMessage = sanitizeException(e)
             throw new RuntimeException("GitHub API call failed: ${safeMessage}", null)
         }

@@ -6,7 +6,7 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh 'exit 1'  // Force failure to test the notification
+                sh 'echo "Build successful"'  
             }
         }
     }

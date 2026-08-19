@@ -116,8 +116,8 @@ class GitHubApiClient implements Serializable {
             String output = proc.inputStream.text
             proc.waitFor()
 
-            int statusCode = output.takeLast(3).toInteger()
-            String responseBody = output.dropLast(3)
+            int statusCode = output.substring(output.length() - 3).toInteger()
+            String responseBody = output.substring(0, output.length() - 3)
 
             return new ApiResponse(
                 statusCode: statusCode,

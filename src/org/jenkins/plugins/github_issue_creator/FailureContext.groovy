@@ -5,7 +5,9 @@ class FailureContext implements Serializable {
 
     String jobName
     String stageName
-    String failureLog
     int buildNumber
     String buildUrl
+
+    String toolName
+    Map sarifResult
 }

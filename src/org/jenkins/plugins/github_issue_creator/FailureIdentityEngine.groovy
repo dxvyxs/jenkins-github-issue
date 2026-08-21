@@ -3,77 +3,40 @@ package org.jenkins.plugins.github_issue_creator
 import java.security.MessageDigest
 
 /**
- * Computes a deterministic, stable identity for a build failure.
- * Used for deduplication: same failure produces same identity hash.
+ * Computes a deterministic identity for a SARIF security finding.
  *
- * Algorithm:
- * 1. Extract first N meaningful error lines from failure log
- * 2. Normalize each line (strip volatile tokens)
- * 3. Concatenate with job/stage context
- * 4. SHA-256 hash, truncated to 16 hex chars
+ * Identity:
+ *   jobName + CVE
+ *
+ * The same CVE reported by different scanners or at different
+ * file locations will map to the same GitHub issue.
  */
 class FailureIdentityEngine implements Serializable {
+
     private static final long serialVersionUID = 1L
 
-    /** Number of meaningful error lines to consider */
-    private static final int DEFAULT_ERROR_LINES = 5
-
-    /** HTML comment marker prefix */
     private static final String MARKER_PREFIX = '<!-- jenkins-issue-id:'
     private static final String MARKER_SUFFIX = ' -->'
 
-    // Patterns for volatile tokens that should be stripped during normalization
-    private static final List<Map<String, String>> NORMALIZATION_PATTERNS = [
-        // ISO-8601 timestamps
-        [pattern: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s]*/, replacement: '<TIMESTAMP>'],
-        // Common log timestamps: 2024-01-15 14:30:22,123
-        [pattern: /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\.]\d{3}/, replacement: '<TIMESTAMP>'],
-        // Unix timestamps (10 or 13 digits)
-        [pattern: /\b\d{10,13}\b/, replacement: '<EPOCH>'],
-        // UUIDs
-        [pattern: /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/, replacement: '<UUID>'],
-        // Build numbers: #123
-        [pattern: /#\d+/, replacement: '#<BUILD>'],
-        // Memory addresses: 0x7fff5fbff8c8
-        [pattern: /0x[0-9a-fA-F]+/, replacement: '<ADDR>'],
-        // Port numbers in host:port context
-        [pattern: /:\d{4,5}\b/, replacement: ':<PORT>'],
-        // Temporary file paths with random components
-        [pattern: /\/tmp\/[^\s]+/, replacement: '<TMPPATH>'],
-        // Process IDs
-        [pattern: /(?i)\bpid[=:\s]+\d+/, replacement: 'pid=<PID>'],
-    ]
-
-    // Lines that are not meaningful for identity computation
-    private static final List<String> SKIP_PATTERNS = [
-        /^\s*$/, // blank lines
-        /^\s*[\-=]{3,}\s*$/, // separator lines
-        /^\s*\.\.\.\s*$/, // ellipsis
-        /^\[Pipeline\]\s/, // Jenkins pipeline progress markers
-        /^\+\s/, // shell trace lines (set -x)
-        /^>\s/, // command echo
-    ]
-
     /**
-     * Compute the failure identity hash.
+     * Compute the identity for a SARIF security finding.
      *
      * @param jobName Jenkins job name
-     * @param stageName Pipeline stage name
-     * @param failureLog Raw failure log output
-     * @param customFailureKey Optional override key (bypasses log analysis)
-     * @return FailureIdentity containing the hash and marker
+     * @param result SARIF result parsed as a Map
      */
-    static FailureIdentity compute(String jobName, String stageName, String failureLog, String customFailureKey = null) {
-        String identityInput
+    static FailureIdentity computeSarifFinding(
+        String jobName,
+        Map result
+    ) {
+        String cve = extractCve(result)
 
-        if (customFailureKey?.trim()) {
-            identityInput = "${jobName}|${stageName}|${customFailureKey.trim()}"
-        } else {
-            List<String> meaningfulLines = extractMeaningfulLines(failureLog, DEFAULT_ERROR_LINES)
-            List<String> normalizedLines = meaningfulLines.collect { normalizeLine(it) }
-            identityInput = "${jobName}|${stageName}|${normalizedLines.join('\n')}"
+        if (!cve) {
+            throw new IllegalArgumentException(
+                'SARIF finding does not contain a CVE'
+            )
         }
 
+        String identityInput = "${jobName}|CVE|${cve}"
         String hash = computeHash(identityInput)
         String marker = "${MARKER_PREFIX}${hash}${MARKER_SUFFIX}"
 
@@ -85,78 +48,100 @@ class FailureIdentityEngine implements Serializable {
     }
 
     /**
-     * Extract the marker from an issue body, if present.
-     *
-     * @param issueBody The full issue body text
-     * @return The identity hash if found, null otherwise
+     * Extract the CVE from the SARIF result.
+     */
+    static String extractCve(Map result) {
+        String cve
+
+        cve = findCve(result?.ruleId)
+        if (cve) {
+            return cve
+        }
+
+        cve = findCve(result?.rule?.id)
+        if (cve) {
+            return cve
+        }
+
+        cve = findCve(result?.message?.text)
+        if (cve) {
+            return cve
+        }
+
+        cve = findCve(result?.rule?.help?.text)
+        if (cve) {
+            return cve
+        }
+
+        return null
+    }
+
+    /**
+     * Find a CVE identifier in text.
+     */
+    private static String findCve(String text) {
+        if (!text) {
+            return null
+        }
+
+        def matcher = text =~ /(?i)\bCVE-\d{4}-\d{4,}\b/
+
+        if (matcher.find()) {
+            return matcher.group().toUpperCase()
+        }
+
+        return null
+    }
+    static String extractRuleId(Map result) {
+        return result?.ruleId ?: result?.rule?.id ?: 'unknown'
+    }
+
+    /**
+     * Extract the first SARIF artifact location.
+     */
+    static String extractLocation(Map result) {
+        return result?.locations?.getAt(0)
+            ?.physicalLocation
+            ?.artifactLocation
+            ?.uri ?: 'unknown'
+    }
+
+
+    /**
+     * Extract the identity marker from an existing GitHub issue body.
      */
     static String extractMarkerHash(String issueBody) {
-        if (!issueBody) return null
+        if (!issueBody) {
+            return null
+        }
 
         int startIdx = issueBody.indexOf(MARKER_PREFIX)
-        if (startIdx < 0) return null
+
+        if (startIdx < 0) {
+            return null
+        }
 
         int hashStart = startIdx + MARKER_PREFIX.length()
         int endIdx = issueBody.indexOf(MARKER_SUFFIX, hashStart)
-        if (endIdx < 0) return null
+
+        if (endIdx < 0) {
+            return null
+        }
 
         return issueBody.substring(hashStart, endIdx).trim()
     }
 
     /**
-     * Extract first N meaningful lines from a failure log.
-     * Skips blank lines, separators, and Jenkins pipeline markers.
-     */
-    static List<String> extractMeaningfulLines(String log, int maxLines) {
-        if (!log?.trim()) return ['<empty-log>']
-
-        List<String> lines = log.split('\n') as List<String>
-        List<String> meaningful = []
-
-        for (String line : lines) {
-            if (meaningful.size() >= maxLines) break
-            if (isSkippableLine(line)) continue
-            meaningful.add(line.trim())
-        }
-
-        return meaningful.isEmpty() ? ['<no-meaningful-lines>'] : meaningful
-    }
-
-    /**
-     * Normalize a single log line by removing volatile tokens.
-     */
-    static String normalizeLine(String line) {
-        if (!line) return ''
-
-        String result = line
-        for (Map<String, String> pattern : NORMALIZATION_PATTERNS) {
-            result = result.replaceAll(pattern.pattern, pattern.replacement)
-        }
-
-        // Collapse whitespace
-        result = result.replaceAll(/\s+/, ' ').trim()
-
-        return result
-    }
-
-    /**
-     * Determine if a line should be skipped (not meaningful for identity).
-     */
-    private static boolean isSkippableLine(String line) {
-        for (String pattern : SKIP_PATTERNS) {
-            if (line ==~ pattern) return true
-        }
-        return false
-    }
-
-    /**
-     * Compute SHA-256 hash, truncated to 16 hex characters (64 bits).
+     * Compute SHA-256 and truncate to 16 hexadecimal characters.
      */
     private static String computeHash(String input) {
         MessageDigest digest = MessageDigest.getInstance('SHA-256')
         byte[] hashBytes = digest.digest(input.getBytes('UTF-8'))
-        String fullHex = hashBytes.collect { String.format('%02x', it) }.join('')
+
+        String fullHex = hashBytes.collect {
+            String.format('%02x', it)
+        }.join('')
+
         return fullHex.substring(0, 16)
     }
 }
-

@@ -17,7 +17,7 @@ class Config implements Serializable {
     String githubApiUrl = 'https://api.github.com'
 
     /** Labels to apply to created issues */
-    List<String> labels = ['ci-failure', 'automated']
+    List<String> labels = ['security', 'automated']
 
     /** Assignees for created issues */
     List<String> assignees = []
@@ -33,12 +33,6 @@ class Config implements Serializable {
 
     /** Optional webhook URL for alerts on safe-fail */
     String alertWebhookUrl = null
-
-    /** Optional custom failure key to override automatic signature computation */
-    String customFailureKey = null
-
-    /** Maximum number of log lines to include in issue body */
-    int maxLogLines = 50
 
     /** Maximum wait time in ms before giving up on rate limit reset (5 minutes) */
     long maxWaitMs = 300_000L

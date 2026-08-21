@@ -66,15 +66,14 @@ def call(Map params = [:]) {
         minCallGapMs: params.minCallGapMs ?: 1000,
         rateLimitThreshold: params.rateLimitThreshold ?: 100,
         alertWebhookUrl: params.alertWebhookUrl,
-        customFailureKey: params.customFailureKey,
-        maxLogLines: params.maxLogLines ?: 50
+        
     )
 
     // Gather failure context from the Jenkins environment
     FailureContext failureContext = buildFailureContext(params)
 
     // Execute with credential binding (token never touches the build log)
-    withCredentials([string(credentialsId: config.credentialId, variable: 'GITHUB_TOKEN')]) {
+    withCredentials([string(credentialsId: config.credentialId, usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
         SecureToken token = null
         try {
             // Wrap token securely
@@ -168,40 +167,20 @@ def call(Map params = [:]) {
  */
 private FailureContext buildFailureContext(Map params) {
     String jobName = env.JOB_NAME ?: 'unknown-job'
-    String stageName = params.stageName ?: env.STAGE_NAME ?: 'Unknown'
+    String stageName = params.stageName ?: env.STAGE_NAME ?: 'Security Scan'
     int buildNumber = env.BUILD_NUMBER?.isInteger() ? env.BUILD_NUMBER.toInteger() : 0
     String buildUrl = env.BUILD_URL ?: ''
-
-    // Extract failure log from the current build
-    String failureLog = getFailureLog()
 
     return new FailureContext(
         jobName: jobName,
         stageName: stageName,
-        failureLog: failureLog,
         buildNumber: buildNumber,
-        buildUrl: buildUrl
+        buildUrl: buildUrl,
+        toolName: params.toolName ?: 'unknown',
+        sarifResult: params.sarifResult
     )
 }
 
-/**
- * Extract the failure log from the current build.
- * Uses the last 200 lines of the build log as the failure context.
- */
-private String getFailureLog() {
-    try {
-        // Access the build log through the currentBuild object
-        String fullLog = currentBuild.rawBuild?.getLog(200)?.join('\n') ?: ''
-        if (!fullLog) {
-            // Fallback: try to get log via currentBuild
-            fullLog = currentBuild.rawBuild?.getLog()?.takeRight(200)?.join('\n') ?: '<log unavailable>'
-        }
-        return fullLog
-    } catch (Exception e) {
-        // If we can't access the log (sandbox restrictions), return what we can
-        return "<log access restricted: ${e.message}>"
-    }
-}
 
 /**
  * Read Jenkins' GitHub API rate-limit strategy and apply it.

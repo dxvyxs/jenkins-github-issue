@@ -1,6 +1,5 @@
 package org.jenkins.plugins.github_issue_creator
 
-import groovy.json.JsonSlurper
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -53,11 +52,9 @@ class GitHubIssueCreator implements Serializable {
         config.validate()
 
         // 1. Compute failure identity
-        FailureIdentity identity = FailureIdentityEngine.compute(
+        FailureIdentity identity = FailureIdentityEngine.computeSarifFinding(
             failureContext.jobName,
-            failureContext.stageName,
-            failureContext.failureLog,
-            config.customFailureKey
+            failureContext.sarifResult
         )
         logger.call("Computed failure identity: ${identity.hash}")
 
@@ -262,60 +259,66 @@ class GitHubIssueCreator implements Serializable {
     // --- Template builders ---
 
     private String buildIssueTitle(FailureContext ctx) {
-        return "[CI Failure] ${ctx.jobName} \u2014 ${ctx.stageName}"
+        String cve = FailureIdentityEngine.extractCve(ctx.sarifResult)
+        return "[Security] ${cve}"
     }
 
     private String buildIssueBody(FailureContext ctx, String marker) {
-        String truncatedLog = truncateLog(ctx.failureLog, config.maxLogLines)
+        String cve = FailureIdentityEngine.extractCve(ctx.sarifResult)
+        String location = FailureIdentityEngine.extractLocation(ctx.sarifResult)
+        String ruleId = FailureIdentityEngine.extractRuleId(ctx.sarifResult)
+
         return """\
-## Build Failure Report
+    ## Security Finding
 
-| Field | Value |
-|-------|-------|
-| Job | ${ctx.jobName} |
-| Build | #${ctx.buildNumber} |
-| Stage | ${ctx.stageName} |
-| Timestamp | ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))} |
-| Build URL | ${ctx.buildUrl} |
+    | Field | Value |
+    |-------|-------|
+    | CVE | ${cve} |
+    | Scanner | ${ctx.toolName} |
+    | Rule | ${ruleId} |
+    | Location | ${location} |
+    | Job | ${ctx.jobName} |
+    | Build | #${ctx.buildNumber} |
+    | Build URL | ${ctx.buildUrl} |
 
-### Error Output
-```
-${truncatedLog}
-```
+    ### Finding
 
----
-*This issue was automatically created by the Jenkins GitHub Issue Creator.*
+    ${ctx.sarifResult?.message?.text ?: 'No finding message provided.'}
 
-${marker}"""
+    ---
+
+    *This issue was automatically created by the Jenkins GitHub Issue Creator.*
+
+    ${marker}"""
     }
 
     private String buildCommentBody(FailureContext ctx) {
-        String truncatedLog = truncateLog(ctx.failureLog, 30)
+        String cve = FailureIdentityEngine.extractCve(ctx.sarifResult)
+        String location = FailureIdentityEngine.extractLocation(ctx.sarifResult)
+        String ruleId = FailureIdentityEngine.extractRuleId(ctx.sarifResult)
+
         return """\
-## Recurring Failure \u2014 Build #${ctx.buildNumber}
+    ## Same CVE Detected Again
 
-| Field | Value |
-|-------|-------|
-| Build | #${ctx.buildNumber} |
-| Timestamp | ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))} |
-| Build URL | ${ctx.buildUrl} |
+    | Field | Value |
+    |-------|-------|
+    | CVE | ${cve} |
+    | Scanner | ${ctx.toolName} |
+    | Rule | ${ruleId} |
+    | Location | ${location} |
+    | Build | #${ctx.buildNumber} |
+    | Build URL | ${ctx.buildUrl} |
+    | Timestamp | ${new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))} |
 
-### Error Output
-```
-${truncatedLog}
-```
+    ### Finding
 
----
-*Automated comment added by Jenkins GitHub Issue Creator.*"""
+    ${ctx.sarifResult?.message?.text ?: 'No finding message provided.'}
+
+    ---
+
+    *Automated comment added by Jenkins GitHub Issue Creator.*"""
     }
 
-    private static String truncateLog(String log, int maxLines) {
-        if (!log) return '<no log output>'
-        List<String> lines = log.split('\n') as List<String>
-        if (lines.size() <= maxLines) return log
-        return lines.take(maxLines).join('\n') + "\n\n... (truncated, ${lines.size() - maxLines} more lines)"
-    }
-}
 
 /**
  * Context about a build failure, passed from the Jenkins pipeline.

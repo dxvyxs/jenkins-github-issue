@@ -318,7 +318,7 @@ class GitHubIssueCreator implements Serializable {
 
     *Automated comment added by Jenkins GitHub Issue Creator.*"""
     }
-
+}
 
 /**
  * Context about a build failure, passed from the Jenkins pipeline.

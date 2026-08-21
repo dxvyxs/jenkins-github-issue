@@ -73,7 +73,11 @@ def call(Map params = [:]) {
     FailureContext failureContext = buildFailureContext(params)
 
     // Execute with credential binding (token never touches the build log)
-    withCredentials([string(credentialsId: config.credentialId, usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+    withCredentials([usernamePassword(
+    credentialsId: config.credentialId,
+    usernameVariable: 'GITHUB_USERNAME',
+    passwordVariable: 'GITHUB_TOKEN'
+        )])  {
         SecureToken token = null
         try {
             // Wrap token securely
